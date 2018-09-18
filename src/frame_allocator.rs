@@ -1,5 +1,5 @@
 use bootloader::bootinfo::{MemoryMap, MemoryRegion, MemoryRegionType};
-use x86_64::structures::paging::{PhysFrame, PhysFrameRange};
+use x86_64::structures::paging::{PhysFrame, PhysFrameRange, self, Size4KiB};
 
 pub(crate) struct FrameAllocator<'a> {
     pub memory_map: &'a mut MemoryMap,
@@ -122,5 +122,11 @@ impl<'a> FrameAllocator<'a> {
             return;
         }
         panic!("region {:x?} is not a usable memory region", region);
+    }
+}
+
+impl<'a> paging::FrameAllocator<Size4KiB> for FrameAllocator<'a> {
+    fn alloc(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        self.allocate_frame(MemoryRegionType::PageTable)
     }
 }

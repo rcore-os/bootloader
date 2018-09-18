@@ -173,13 +173,8 @@ pub extern "C" fn load_elf(
             .allocate_frame(MemoryRegionType::BootInfo)
             .expect("frame allocation failed");
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-        page_table::map_page(
-            page,
-            frame,
-            flags,
-            &mut rec_page_table,
-            &mut frame_allocator,
-        ).expect("Mapping of bootinfo page failed")
+        rec_page_table.map_to(page, frame, flags, &mut frame_allocator)
+            .expect("Mapping of bootinfo page failed")
         .flush();
         page
     };

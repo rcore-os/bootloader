@@ -31,7 +31,7 @@ pub(crate) fn map_kernel(
         let frame = frame_allocator
             .allocate_frame(region_type)
             .ok_or(MapToError::FrameAllocationFailed)?;
-        map_page(page, frame, flags, page_table, frame_allocator)?.flush();
+        page_table.map_to(page, frame, flags, frame_allocator)?.flush();
     }
 
     Ok(stack_end.start_address())
@@ -68,7 +68,7 @@ pub(crate) fn map_segment(
             for frame in PhysFrame::range_inclusive(start_frame, end_frame) {
                 let offset = frame - start_frame;
                 let page = start_page + offset;
-                map_page(page, frame, page_table_flags, page_table, frame_allocator)?.flush();
+                page_table.map_to(page, frame, page_table_flags, frame_allocator)?.flush();
             }
 
             if mem_size > file_size {
@@ -85,11 +85,10 @@ pub(crate) fn map_segment(
                     let new_frame = frame_allocator
                         .allocate_frame(MemoryRegionType::Kernel)
                         .ok_or(MapToError::FrameAllocationFailed)?;
-                    map_page(
+                    page_table.map_to(
                         temp_page.clone(),
                         new_frame.clone(),
                         page_table_flags,
-                        page_table,
                         frame_allocator,
                     )?.flush();
 
@@ -113,11 +112,10 @@ pub(crate) fn map_segment(
                         });
                     }
 
-                    map_page(
+                    page_table.map_to(
                         last_page,
                         new_frame,
                         page_table_flags,
-                        page_table,
                         frame_allocator,
                     )?.flush();
                 }
@@ -132,7 +130,7 @@ pub(crate) fn map_segment(
                     let frame = frame_allocator
                         .allocate_frame(MemoryRegionType::Kernel)
                         .ok_or(MapToError::FrameAllocationFailed)?;
-                    map_page(page, frame, page_table_flags, page_table, frame_allocator)?.flush();
+                    page_table.map_to(page, frame, page_table_flags, frame_allocator)?.flush();
                 }
 
                 // zero
@@ -145,31 +143,4 @@ pub(crate) fn map_segment(
         _ => {}
     }
     Ok(())
-}
-
-pub(crate) fn map_page<'a, S>(
-    page: Page<S>,
-    phys_frame: PhysFrame<S>,
-    flags: PageTableFlags,
-    page_table: &mut RecursivePageTable<'a>,
-    frame_allocator: &mut FrameAllocator,
-) -> Result<MapperFlush<S>, MapToError>
-where
-    S: PageSize,
-    RecursivePageTable<'a>: Mapper<S>,
-{
-    struct PageTableAllocator<'a, 'b: 'a>(&'a mut FrameAllocator<'b>);
-
-    impl<'a, 'b> paging::FrameAllocator<Size4KiB> for PageTableAllocator<'a, 'b> {
-        fn alloc(&mut self) -> Option<PhysFrame<Size4KiB>> {
-            self.0.allocate_frame(MemoryRegionType::PageTable)
-        }
-    }
-
-    page_table.map_to(
-        page,
-        phys_frame,
-        flags,
-        &mut PageTableAllocator(frame_allocator),
-    )
 }
