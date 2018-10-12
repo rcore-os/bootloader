@@ -21,12 +21,13 @@ use core::panic::PanicInfo;
 use core::slice;
 use usize_conversions::usize_from;
 use x86_64::structures::paging::{Mapper, RecursivePageTable};
-use x86_64::structures::paging::{Page, PageTableFlags, PhysFrame, Size2MiB};
+use x86_64::structures::paging::{Page, PageTableFlags, PhysFrame, Size2MiB, Size4KiB};
 use x86_64::ux::u9;
 pub use x86_64::PhysAddr;
 use x86_64::VirtAddr;
 
 global_asm!(include_str!("boot.s"));
+global_asm!(include_str!("boot_ap.s"));
 global_asm!(include_str!("second_stage.s"));
 global_asm!(include_str!("memory_map.s"));
 global_asm!(include_str!("context_switch.s"));
@@ -39,6 +40,7 @@ mod boot_info;
 mod frame_allocator;
 mod page_table;
 mod printer;
+mod lapic;
 
 pub struct IdentityMappedAddr(PhysAddr);
 
@@ -54,6 +56,13 @@ impl IdentityMappedAddr {
     fn as_u64(&self) -> u64 {
         self.0.as_u64()
     }
+}
+
+#[no_mangle]
+pub extern "C" fn other_main() {
+    enable_nxe_bit();
+    enable_write_protect_bit();
+    loop {}
 }
 
 #[no_mangle]
@@ -175,9 +184,26 @@ pub extern "C" fn load_elf(
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         rec_page_table.map_to(page, frame, flags, &mut frame_allocator)
             .expect("Mapping of bootinfo page failed")
-        .flush();
+            .flush();
         page
     };
+
+    // Map zero & local apic
+    let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+    rec_page_table.identity_map(
+        PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0)),
+        flags, &mut frame_allocator).unwrap().flush();
+    rec_page_table.identity_map(
+        PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xfee00000)),
+        flags, &mut frame_allocator).unwrap().flush();
+
+    // Start other processors
+    unsafe {
+        // TODO: Use `acpi` crate to count processors
+        for i in 1..16 {
+            lapic::start_ap(i, 0x8000);
+        }
+    }
 
     // Construct boot info structure.
     let mut boot_info = BootInfo::new(

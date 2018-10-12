@@ -31,7 +31,9 @@ SECTIONS {
         *(.boot)
 
         /* second stage */
+        . = ALIGN(4K);
         _second_stage_start_addr = .;
+        KEEP(*(.boot_ap))
         *(.second_stage)
         *(.context_switch)
         *(.text .text.*)

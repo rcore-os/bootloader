@@ -144,6 +144,18 @@ set_up_page_tables:
     shr ecx, 12
     mov [_p1 + ecx * 8], eax
 
+    call enable_paging
+
+load_64bit_gdt:
+    lgdt gdt_64_pointer                # Load GDT.Pointer defined below.
+
+jump_to_long_mode:
+    push 0x8
+    lea eax, [long_mode]
+    push eax
+    retf # Load CS with 64 bit segment and flush the instruction cache
+
+    jmp spin
 
 enable_paging:
     # load P4 to cr3 register (cpu uses this to access the P4 table)
@@ -166,17 +178,7 @@ enable_paging:
     or eax, ((1 << 31) | 1)
     mov cr0, eax
 
-load_64bit_gdt:
-    lgdt gdt_64_pointer                # Load GDT.Pointer defined below.
-
-jump_to_long_mode:
-    push 0x8
-    lea eax, [long_mode]
-    push eax
-    retf # Load CS with 64 bit segment and flush the instruction cache
-
-    jmp spin
-
+    ret
 
 check_cpuid:
     # Check if CPUID is supported by attempting to flip the ID bit (bit 21)
