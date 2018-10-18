@@ -15,6 +15,7 @@ extern crate x86_64;
 extern crate xmas_elf;
 #[macro_use]
 extern crate fixedvec;
+extern crate apic;
 
 use bootloader::bootinfo::BootInfo;
 use core::panic::PanicInfo;
@@ -25,6 +26,7 @@ use x86_64::structures::paging::{Page, PageTableFlags, PhysFrame, Size2MiB, Size
 use x86_64::ux::u9;
 pub use x86_64::PhysAddr;
 use x86_64::VirtAddr;
+use apic::{LocalApic, XApic};
 
 global_asm!(include_str!("boot.s"));
 global_asm!(include_str!("boot_ap.s"));
@@ -40,7 +42,6 @@ mod boot_info;
 mod frame_allocator;
 mod page_table;
 mod printer;
-mod lapic;
 
 pub struct IdentityMappedAddr(PhysAddr);
 
@@ -58,11 +59,25 @@ impl IdentityMappedAddr {
     }
 }
 
+// Set by first core
+const BOOT_INFO_ADDR: u64 = 0xb0071f0000;
+static mut ENTRY_POINT: u64 = 0;
+static mut KSTACK_TOP: u64 = 0;
+static mut BOOTING_CORE_ID: u8 = 0;
+
+unsafe fn get_kstack_top(core_id: u8) -> VirtAddr {
+    VirtAddr::new(KSTACK_TOP - 0x10000 * core_id as u64)
+}
+
 #[no_mangle]
-pub extern "C" fn other_main() {
+pub unsafe extern "C" fn other_main() {
     enable_nxe_bit();
     enable_write_protect_bit();
-    loop {}
+    let core_id = BOOTING_CORE_ID;
+    // Notify this core booting end
+    BOOTING_CORE_ID += 1;
+    let stack_top = get_kstack_top(core_id);
+    context_switch(VirtAddr::new(BOOT_INFO_ADDR), VirtAddr::new(ENTRY_POINT), stack_top);
 }
 
 #[no_mangle]
@@ -87,14 +102,13 @@ pub extern "C" fn load_elf(
     // Extract required information from the ELF file.
     let mut preallocated_space = alloc_stack!([ProgramHeader64; 32]);
     let mut segments = FixedVec::new(&mut preallocated_space);
-    let entry_point;
     {
         let kernel_start_ptr = usize_from(kernel_start.as_u64()) as *const u8;
         let kernel = unsafe { slice::from_raw_parts(kernel_start_ptr, usize_from(kernel_size)) };
         let elf_file = xmas_elf::ElfFile::new(kernel).unwrap();
         xmas_elf::header::sanity_check(&elf_file).unwrap();
 
-        entry_point = elf_file.header.pt2.entry_point();
+        unsafe { ENTRY_POINT = elf_file.header.pt2.entry_point(); }
 
         for program_header in elf_file.program_iter() {
             match program_header {
@@ -174,10 +188,11 @@ pub extern "C" fn load_elf(
         &mut rec_page_table,
         &mut frame_allocator,
     ).expect("kernel mapping failed");
+    unsafe { KSTACK_TOP = stack_end.as_u64(); }
 
     // Map a page for the boot info structure
     let boot_info_page = {
-        let page: Page = Page::containing_address(VirtAddr::new(0xb0071f0000));
+        let page: Page = Page::containing_address(VirtAddr::new(BOOT_INFO_ADDR));
         let frame = frame_allocator
             .allocate_frame(MemoryRegionType::BootInfo)
             .expect("frame allocation failed");
@@ -193,15 +208,21 @@ pub extern "C" fn load_elf(
     rec_page_table.identity_map(
         PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0)),
         flags, &mut frame_allocator).unwrap().flush();
-    rec_page_table.identity_map(
+    rec_page_table.map_to(
+        Page::containing_address(VirtAddr::new(0xffffff00_fee00000)),
         PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xfee00000)),
         flags, &mut frame_allocator).unwrap().flush();
 
     // Start other processors
     unsafe {
+        assert!(XApic::support(), "xapic is not supported");
+        let mut apic = XApic::new(0xffffff00_fee00000);
+
         // TODO: Use `acpi` crate to count processors
-        for i in 1..16 {
-            lapic::start_ap(i, 0x8000);
+        for i in 1..4 {
+            BOOTING_CORE_ID = i;
+            apic.start_ap(i, 0x8000);
+            while core::ptr::read_volatile(&BOOTING_CORE_ID) == i {}
         }
     }
 
@@ -214,15 +235,12 @@ pub extern "C" fn load_elf(
     boot_info.memory_map.sort();
 
     // Write boot info to boot info page.
-    let boot_info_addr = boot_info_page.start_address();
-    unsafe { boot_info_addr.as_mut_ptr::<BootInfo>().write(boot_info) };
+    unsafe { (BOOT_INFO_ADDR as *mut BootInfo).write(boot_info) };
 
     // Make sure that the kernel respects the write-protection bits, even when in ring 0.
     enable_write_protect_bit();
 
-    let entry_point = VirtAddr::new(entry_point);
-
-    unsafe { context_switch(boot_info_addr, entry_point, stack_end) };
+    unsafe { context_switch(VirtAddr::new(BOOT_INFO_ADDR), VirtAddr::new(ENTRY_POINT), stack_end) };
 }
 
 fn enable_nxe_bit() {
