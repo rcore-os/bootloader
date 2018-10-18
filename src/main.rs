@@ -203,28 +203,7 @@ pub extern "C" fn load_elf(
         page
     };
 
-    // Map zero & local apic
-    let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-    rec_page_table.identity_map(
-        PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0)),
-        flags, &mut frame_allocator).unwrap().flush();
-    rec_page_table.map_to(
-        Page::containing_address(VirtAddr::new(0xffffff00_fee00000)),
-        PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xfee00000)),
-        flags, &mut frame_allocator).unwrap().flush();
-
-    // Start other processors
-    unsafe {
-        assert!(XApic::support(), "xapic is not supported");
-        let mut apic = XApic::new(0xffffff00_fee00000);
-
-        // TODO: Use `acpi` crate to count processors
-        for i in 1..4 {
-            BOOTING_CORE_ID = i;
-            apic.start_ap(i, 0x8000);
-            while core::ptr::read_volatile(&BOOTING_CORE_ID) == i {}
-        }
-    }
+    start_other_processor(&mut rec_page_table, &mut frame_allocator);
 
     // Construct boot info structure.
     let mut boot_info = BootInfo::new(
@@ -241,6 +220,34 @@ pub extern "C" fn load_elf(
     enable_write_protect_bit();
 
     unsafe { context_switch(VirtAddr::new(BOOT_INFO_ADDR), VirtAddr::new(ENTRY_POINT), stack_end) };
+}
+
+fn start_other_processor(page_table: &mut RecursivePageTable, frame_allocator: &mut frame_allocator::FrameAllocator) {
+    // Map zero & local apic temporarily
+    let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+    page_table.identity_map(
+        PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0)),
+        flags, frame_allocator).unwrap().flush();
+    page_table.identity_map(
+        PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xfee00000)),
+        flags, frame_allocator).unwrap().flush();
+
+    // Start other processors
+    unsafe {
+        assert!(XApic::support(), "xapic is not supported");
+        let mut apic = XApic::new(0xfee00000);
+
+        // TODO: Use `acpi` crate to count processors
+        for i in 1..4 {
+            BOOTING_CORE_ID = i;
+            apic.start_ap(i, 0x8000);
+            while core::ptr::read_volatile(&BOOTING_CORE_ID) == i {}
+        }
+    }
+
+    // Unmap
+    page_table.unmap(Page::<Size4KiB>::containing_address(VirtAddr::new(0))).unwrap().1.flush();
+    page_table.unmap(Page::<Size4KiB>::containing_address(VirtAddr::new(0xfee00000))).unwrap().1.flush();
 }
 
 fn enable_nxe_bit() {
