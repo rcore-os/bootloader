@@ -162,9 +162,9 @@ enable_paging:
     lea eax, [_p4]
     mov cr3, eax
 
-    # enable PAE-flag in cr4 (Physical Address Extension)
+    # enable PAE (Physical Address Extension) and PGE (Page Global Enabled) in cr4
     mov eax, cr4
-    or eax, (1 << 5)
+    or eax, (1 << 5) | (1 << 7)
     mov cr4, eax
 
     # set the long mode bit in the EFER MSR (model specific register)
