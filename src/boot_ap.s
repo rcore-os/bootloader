@@ -28,8 +28,19 @@ ap_start:
     mov     cr0, eax
 
     # set stack pointer
-    mov     esp, 0x7000
+    mov     esp, 0x7600
 
+    # load the 32-bit GDT
+    lgdt    [gdt32info]
+
+    # jump to 32-bit
+    push 0x8
+    lea     eax, [ap_start32]
+    push    eax
+    retf
+
+.code32
+ap_start32:
     call    enable_paging
 
     # load the 64-bit GDT

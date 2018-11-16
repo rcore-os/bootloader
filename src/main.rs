@@ -5,7 +5,6 @@
 #![feature(asm)]
 #![feature(nll)]
 #![feature(const_fn)]
-#![feature(panic_implementation)]
 #![no_std]
 #![no_main]
 
@@ -28,10 +27,12 @@ pub use x86_64::PhysAddr;
 use x86_64::VirtAddr;
 use apic::{LocalApic, XApic};
 
-global_asm!(include_str!("boot.s"));
 global_asm!(include_str!("boot_ap.s"));
-global_asm!(include_str!("second_stage.s"));
-global_asm!(include_str!("memory_map.s"));
+global_asm!(include_str!("stage_1.s"));
+global_asm!(include_str!("stage_2.s"));
+global_asm!(include_str!("e820.s"));
+global_asm!(include_str!("stage_3.s"));
+global_asm!(include_str!("stage_4.s"));
 global_asm!(include_str!("context_switch.s"));
 
 extern "C" {
@@ -260,7 +261,7 @@ fn enable_write_protect_bit() {
     unsafe { Cr0::update(|cr0| *cr0 |= Cr0Flags::WRITE_PROTECT) };
 }
 
-#[panic_implementation]
+#[panic_handler]
 #[no_mangle]
 pub extern "C" fn panic(info: &PanicInfo) -> ! {
     use core::fmt::Write;
