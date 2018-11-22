@@ -239,10 +239,18 @@ fn start_other_processor(page_table: &mut RecursivePageTable, frame_allocator: &
         let mut apic = XApic::new(0xfee00000);
 
         // TODO: Use `acpi` crate to count processors
-        for i in 1..4 {
+        for i in 1.. {
             BOOTING_CORE_ID = i;
             apic.start_ap(i, 0x8000);
-            while core::ptr::read_volatile(&BOOTING_CORE_ID) == i {}
+
+            const TIMEOUT: usize = 0x8000000;
+            let mut count = 0;
+            while count < TIMEOUT && core::ptr::read_volatile(&BOOTING_CORE_ID) == i {
+                count += 1;
+            }
+            if count == TIMEOUT {
+                break;
+            }
         }
     }
 
