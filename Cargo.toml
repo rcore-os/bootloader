@@ -2,7 +2,7 @@ cargo-features = ["publish-lockfile"]
 
 [package]
 name = "bootloader"
-version = "0.3.4"
+version = "0.3.14"
 authors = ["Philipp Oppermann <dev@phil-opp.com>"]
 license = "MIT/Apache-2.0"
 description = "An experimental pure-Rust x86 bootloader."
@@ -11,10 +11,19 @@ publish-lockfile = true
 
 [dependencies]
 xmas-elf = "0.6.2"
-x86_64 = "0.2.7"
+x86_64 = "0.3.5"
 usize_conversions = "0.2.0"
 fixedvec = "0.2.3"
 apic = { git = "https://github.com/wangrunji0408/APIC-Rust" }
+
+[dependencies.font8x8]
+version = "0.2.4"
+default-features = false
+features = ["unicode"]
+
+[features]
+default = []
+vga_320x200 = []
 
 [profile.dev]
 panic = "abort"

@@ -14,6 +14,7 @@ extern crate x86_64;
 extern crate xmas_elf;
 #[macro_use]
 extern crate fixedvec;
+extern crate font8x8;
 extern crate apic;
 
 use bootloader::bootinfo::BootInfo;
@@ -32,11 +33,16 @@ global_asm!(include_str!("stage_1.s"));
 global_asm!(include_str!("stage_2.s"));
 global_asm!(include_str!("e820.s"));
 global_asm!(include_str!("stage_3.s"));
-global_asm!(include_str!("stage_4.s"));
-global_asm!(include_str!("context_switch.s"));
 
-extern "C" {
-    fn context_switch(boot_info: VirtAddr, entry_point: VirtAddr, stack_pointer: VirtAddr) -> !;
+#[cfg(feature = "vga_320x200")]
+global_asm!(include_str!("video_mode/vga_320x200.s"));
+#[cfg(not(feature = "vga_320x200"))]
+global_asm!(include_str!("video_mode/vga_text_80x25.s"));
+
+unsafe fn context_switch(boot_info: VirtAddr, entry_point: VirtAddr, stack_pointer: VirtAddr) -> ! {
+    asm!("jmp $1; ${:private}.spin.${:uid}: jmp ${:private}.spin.${:uid}" ::
+         "{rsp}"(stack_pointer), "r"(entry_point), "{rdi}"(boot_info) :: "intel");
+    ::core::hint::unreachable_unchecked()
 }
 
 mod boot_info;
@@ -81,8 +87,45 @@ pub unsafe extern "C" fn other_main() {
     context_switch(VirtAddr::new(BOOT_INFO_ADDR), VirtAddr::new(ENTRY_POINT), stack_top);
 }
 
+// Symbols defined in `linker.ld`
+extern "C" {
+    static mmap_ent: usize;
+    static _memory_map: usize;
+    static _kib_kernel_size: usize;
+    static __page_table_start: usize;
+    static __page_table_end: usize;
+    static __bootloader_end: usize;
+    static __bootloader_start: usize;
+}
+
 #[no_mangle]
-pub extern "C" fn load_elf(
+pub unsafe extern "C" fn stage_4() -> ! {
+    // Set stack segment
+    asm!("mov bx, 0x0
+          mov ss, bx" ::: "bx" : "intel");
+
+    let kernel_start = 0x400000;
+    let kernel_size = _kib_kernel_size as u64;
+    let memory_map_addr = &_memory_map as *const _ as u64;
+    let memory_map_entry_count = (mmap_ent & 0xff) as u64; // Extract lower 8 bits
+    let page_table_start = &__page_table_start as *const _ as u64;
+    let page_table_end = &__page_table_end as *const _ as u64;
+    let bootloader_start = &__bootloader_start as *const _ as u64;
+    let bootloader_end = &__bootloader_end as *const _ as u64;
+
+    load_elf(
+        IdentityMappedAddr(PhysAddr::new(kernel_start)),
+        kernel_size,
+        VirtAddr::new(memory_map_addr),
+        memory_map_entry_count,
+        PhysAddr::new(page_table_start),
+        PhysAddr::new(page_table_end),
+        PhysAddr::new(bootloader_start),
+        PhysAddr::new(bootloader_end),
+    )
+}
+
+fn load_elf(
     kernel_start: IdentityMappedAddr,
     kernel_size: u64,
     memory_map_addr: VirtAddr,
@@ -188,7 +231,8 @@ pub extern "C" fn load_elf(
         &segments,
         &mut rec_page_table,
         &mut frame_allocator,
-    ).expect("kernel mapping failed");
+    )
+    .expect("kernel mapping failed");
     unsafe { KSTACK_TOP = stack_end.as_u64(); }
 
     // Map a page for the boot info structure

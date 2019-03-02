@@ -1,0 +1,4 @@
+status = [
+    "rust-osdev.bootloader"
+]
+delete_merged_branches = true

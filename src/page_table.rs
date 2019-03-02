@@ -90,7 +90,8 @@ pub(crate) fn map_segment(
                         new_frame.clone(),
                         page_table_flags,
                         frame_allocator,
-                    )?.flush();
+                    )?
+                    .flush();
 
                     type PageArray = [u64; Size4KiB::SIZE as usize / 8];
 
@@ -117,7 +118,8 @@ pub(crate) fn map_segment(
                         new_frame,
                         page_table_flags,
                         frame_allocator,
-                    )?.flush();
+                    )?
+                    .flush();
                 }
 
                 // Map additional frames.
