@@ -248,6 +248,14 @@ fn load_elf(
         page
     };
 
+    // Map VGA 0xb8000 to kernel P4 area
+    // TODO: choose a better virtual address
+    let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+    rec_page_table.map_to(
+        Page::containing_address(VirtAddr::new(0xffffff00_f0000000)),
+        PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xb8000)),
+        flags, &mut frame_allocator).unwrap().flush();
+
     start_other_processor(&mut rec_page_table, &mut frame_allocator);
 
     // Construct boot info structure.
