@@ -23,7 +23,7 @@ default-features = false
 features = ["unicode"]
 
 [features]
-default = ["recursive_page_table"]
+default = ["map_physical_memory"]
 vga_320x200 = []
 recursive_page_table = []
 map_physical_memory = []
