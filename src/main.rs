@@ -29,9 +29,11 @@ global_asm!(include_str!("stage_2.s"));
 global_asm!(include_str!("e820.s"));
 global_asm!(include_str!("stage_3.s"));
 
+#[cfg(feature = "vga_1024x768")]
+global_asm!(include_str!("video_mode/vga_1024x768.s"));
 #[cfg(feature = "vga_320x200")]
 global_asm!(include_str!("video_mode/vga_320x200.s"));
-#[cfg(not(feature = "vga_320x200"))]
+#[cfg(not(any(feature = "vga_320x200", feature = "vga_1024x768")))]
 global_asm!(include_str!("video_mode/vga_text_80x25.s"));
 
 unsafe fn context_switch(boot_info: VirtAddr, entry_point: VirtAddr, stack_pointer: VirtAddr) -> ! {
@@ -91,6 +93,16 @@ extern "C" {
     static __page_table_end: usize;
     static __bootloader_end: usize;
     static __bootloader_start: usize;
+    static _vbe_info: VbeModeInfo;
+}
+
+// https://wiki.osdev.org/User:Omarrx024/VESA_Tutorial
+#[repr(C, packed)]
+struct VbeModeInfo {
+    _1: [u8; 25],
+    bpp: u8,
+    _2: [u8; 14],
+    framebuffer: u32,
 }
 
 #[no_mangle]
@@ -266,13 +278,15 @@ fn load_elf(
         }
     }
 
-    // Map VGA framebuffer @ 0xa0000 to kernel P4 area
+    let framebuffer_paddr = unsafe { _vbe_info.framebuffer };
+
+    // Map VGA 1024x768 framebuffer to kernel P4 area
     // TODO: choose a better virtual address
-    for i in 0..16 {
+    for i in 0..2 {
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         rec_page_table.map_to(
-            Page::containing_address(VirtAddr::new(0xffffff00_f0000000 + i * 0x1000)),
-            PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xa0000 + i * 0x1000)),
+            Page::containing_address(VirtAddr::new(0xffffff00_f0000000 + i * 0x200000)),
+            PhysFrame::<Size2MiB>::containing_address(PhysAddr::new(framebuffer_paddr as u64 + i * 0x200000)),
             flags, &mut frame_allocator).unwrap().flush();
     }
 

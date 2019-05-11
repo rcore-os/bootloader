@@ -18,8 +18,10 @@ SECTIONS {
     . += 0x1000;
     __page_table_end = .;
     __bootloader_start = .;
+    _vbe_info = .;
+    . += 0x100;
     _memory_map = .;
-    . += 0x1000;
+    . += 0x1000 - 0x100;
 
     _stack_start = .;
     . = 0x7c00;

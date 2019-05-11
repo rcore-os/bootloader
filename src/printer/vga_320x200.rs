@@ -72,9 +72,9 @@ impl Printer {
 
 impl Write for Printer {
     fn write_str(&mut self, s: &str) -> Result {
-        for c in s.chars() {
-            self.write_char(c);
-        }
+//        for c in s.chars() {
+//            self.write_char(c);
+//        }
 
         Ok(())
     }
