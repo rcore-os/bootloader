@@ -42,23 +42,19 @@ pub struct BootInfo {
     /// can be safely accessed.
     #[cfg(feature = "map_physical_memory")]
     pub physical_memory_offset: u64,
-    _non_exhaustive: u8, // `()` is not FFI safe
+    /// The VBE mode information
+    pub vbe_info: VbeModeInfo,
 }
 
-impl BootInfo {
-    /// Create a new boot information structure. This function is only for internal purposes.
-    #[allow(unused_variables)]
-    #[doc(hidden)]
-    pub fn new(memory_map: MemoryMap, recursive_page_table_addr: u64, physical_memory_offset: u64) -> Self {
-        BootInfo {
-            memory_map,
-            #[cfg(feature = "recursive_page_table")]
-            recursive_page_table_addr,
-            #[cfg(feature = "map_physical_memory")]
-            physical_memory_offset,
-            _non_exhaustive: 0,
-        }
-    }
+/// The VBE mode information
+/// https://wiki.osdev.org/User:Omarrx024/VESA_Tutorial
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+pub struct VbeModeInfo {
+    _1: [u8; 25],
+    bpp: u8,
+    _2: [u8; 14],
+    framebuffer: u32,
 }
 
 extern "C" {

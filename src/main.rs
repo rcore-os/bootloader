@@ -8,7 +8,7 @@
 #![no_std]
 #![no_main]
 
-use bootloader::bootinfo::{BootInfo, FrameRange};
+use bootloader::bootinfo::{BootInfo, FrameRange, VbeModeInfo};
 use core::panic::PanicInfo;
 use core::{mem, slice};
 use fixedvec::alloc_stack;
@@ -96,15 +96,6 @@ extern "C" {
     static __bootloader_end: usize;
     static __bootloader_start: usize;
     static _vbe_info: VbeModeInfo;
-}
-
-// https://wiki.osdev.org/User:Omarrx024/VESA_Tutorial
-#[repr(C, packed)]
-struct VbeModeInfo {
-    _1: [u8; 25],
-    bpp: u8,
-    _2: [u8; 14],
-    framebuffer: u32,
 }
 
 #[no_mangle]
@@ -280,22 +271,17 @@ fn load_elf(
         }
     }
 
-    let framebuffer_paddr = unsafe { _vbe_info.framebuffer };
-
-    // Map VGA 1024x768 framebuffer to kernel P4 area
-    // TODO: choose a better virtual address
-    for i in 0..2 {
-        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-        rec_page_table.map_to(
-            Page::containing_address(VirtAddr::new(0xffffff00_f0000000 + i * 0x200000)),
-            PhysFrame::<Size2MiB>::containing_address(PhysAddr::new(framebuffer_paddr as u64 + i * 0x200000)),
-            flags, &mut frame_allocator).unwrap().flush();
-    }
-
     start_other_processor(&mut rec_page_table, &mut frame_allocator);
 
     // Construct boot info structure.
-    let mut boot_info = BootInfo::new(memory_map, recursive_page_table_addr.as_u64(), PHYSICAL_MEMORY_OFFSET);
+    let mut boot_info = BootInfo {
+        memory_map,
+        #[cfg(feature = "recursive_page_table")]
+        recursive_page_table_addr: recursive_page_table_addr.as_u64(),
+        #[cfg(feature = "map_physical_memory")]
+        physical_memory_offset: PHYSICAL_MEMORY_OFFSET,
+        vbe_info: unsafe { _vbe_info.clone() },
+    };
     boot_info.memory_map.sort();
 
     // Write boot info to boot info page.
