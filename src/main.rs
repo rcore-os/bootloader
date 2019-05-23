@@ -68,7 +68,9 @@ static mut KSTACK_TOP: u64 = 0;
 static mut BOOTING_CORE_ID: u8 = 0;
 
 unsafe fn get_kstack_top(core_id: u8) -> VirtAddr {
-    VirtAddr::new(KSTACK_TOP - 0x10000 * core_id as u64)
+    // stack size: 4 pages/core, total: 512 pages
+    // support up to 128 cores
+    VirtAddr::new(KSTACK_TOP - 0x4000 * core_id as u64)
 }
 
 #[no_mangle]
