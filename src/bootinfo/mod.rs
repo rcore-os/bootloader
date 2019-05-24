@@ -49,7 +49,7 @@ pub struct BootInfo {
 /// The VBE mode information
 /// https://wiki.osdev.org/User:Omarrx024/VESA_Tutorial
 #[repr(C, packed)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct VbeModeInfo {
     _1: [u8; 6],
     window_size: u16,
