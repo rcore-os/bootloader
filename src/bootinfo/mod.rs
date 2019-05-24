@@ -51,9 +51,17 @@ pub struct BootInfo {
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct VbeModeInfo {
-    _1: [u8; 25],
+    _1: [u8; 6],
+    window_size: u16,
+    segment_a: u16,
+    segment_b: u16,
+    _2: u32,
+    pitch: u16,
+    width: u16,
+    height: u16,
+    _3: [u8; 3],
     bpp: u8,
-    _2: [u8; 14],
+    _4: [u8; 14],
     framebuffer: u32,
 }
 
