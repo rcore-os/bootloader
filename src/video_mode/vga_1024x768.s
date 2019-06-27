@@ -3,12 +3,17 @@
 .code16
 
 config_video_mode:
+    mov bx, 0x4119	# VBE mode number mode(0x4118): 1024x768, 24bpp ; notice that bits 0-13 contain the mode number and bit 14 (LFB) is set and bit 15 (DM) is clear.
+
+try_mode:
+    sub bx, 1
     mov ax, 0x4F02	# set VBE mode
-    mov bx, 0x4118	# VBE mode number; notice that bits 0-13 contain the mode number and bit 14 (LFB) is set and bit 15 (DM) is clear.
     int 0x10		# call VBE BIOS
+    cmp ax, 0x004F  # success
+    jne try_mode
 
     mov ax, 0x4F01  # get mode info
-    mov cx, 0x4118  # mode: 1024x768, 24bpp
+    mov cx, bx      
     lea di, es:[_vbe_info] # output ModeInfoBlock at es:di
     int 0x10        # call VBE BIOS
 

@@ -48,20 +48,39 @@ pub struct BootInfo {
 
 /// The VBE mode information
 /// https://wiki.osdev.org/User:Omarrx024/VESA_Tutorial
+/// https://wiki.osdev.org/Getting_VBE_Mode_Info
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VbeModeInfo {
-    pub _1: [u8; 6],
+    pub attributes: u16,
+    pub win_a: u8,
+    pub win_b: u8,
+    pub granularity: u16,
     pub window_size: u16,
     pub segment_a: u16,
     pub segment_b: u16,
-    pub _2: u32,
+    pub _1: u32,
     pub pitch: u16,
     pub width: u16,
     pub height: u16,
-    pub _3: [u8; 3],
+    pub w_char: u8,
+    pub y_char: u8,
+    pub planes: u8,
     pub bpp: u8,
-    pub _4: [u8; 14],
+    pub banks: u8,
+    pub memory_model: u8,
+    pub bank_size: u8,
+    pub image_pages: u8,
+    pub _2: u8,
+    pub red_mask: u8,
+    pub red_position: u8,
+    pub green_mask: u8,
+    pub green_position: u8,
+    pub blue_mask: u8,
+    pub blue_position: u8,
+    pub rsv_mask: u8,
+    pub rsv_position: u8,
+    pub directcolor_attributes: u8,
     pub framebuffer: u32,
 }
 
